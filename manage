@@ -88,6 +88,7 @@ command_verify() {
   shift
   (
     cd "$PKG_NAME"
+    makepkg --printsrcinfo > .SRCINFO
     for PKG_FILE in *.pkg.tar.zst; do
       _trace repro -f "$PKG_FILE"
     done
