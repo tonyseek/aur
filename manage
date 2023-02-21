@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+set -e
+set -o pipefail
+
+PROTO_DIR="/usr/share/pacman"
+PROTO_PKGBUILD_FILE0="$PROTO_DIR/PKGBUILD.proto"
+PROTO_PKGBUILD_FILE1="$PROTO_DIR/PKGBUILD-split.proto"
+PROTO_PKGBUILD_FILE2="$PROTO_DIR/PKGBUILD-vcs.proto"
+PROTO_INSTALL_FILE="$PROTO_DIR/proto.install"
+
+{ set -x; } 2>/dev/null
+test -f "$PROTO_PKGBUILD_FILE0"
+test -f "$PROTO_PKGBUILD_FILE1"
+test -f "$PROTO_PKGBUILD_FILE2"
+test -f "$PROTO_INSTALL_FILE"
+{ set +x; } 2>/dev/null
+
+PROG_NAME="$0"
+CMD_NAME="$1"
+shift
+
+mkdir_empty() {
+  mkdir -p "$1"
+  if [ -n "$(ls -A "$1")" ]; then
+    printf >&2 'error: %s is not an empty directory\n' "$1"
+    return 1
+  fi
+}
+
+cp_echo() {
+  { set -x; } 2>/dev/null
+  cp "$@"
+  { set +x; } 2>/dev/null
+}
+
+command_help() {
+  printf >&2 'Usage: %s COMMAND\n' "$PROG_NAME"
+  printf >&2 'Commands:\n'
+  printf >&2 '  %-15s%s\n' \
+    "create" "Create a new package from example" \
+    "help" "Show this help information"
+}
+
+command_create() {
+  PKG_NAME="$1"
+  shift
+  PKG_ALIASES=("$@")
+  mkdir_empty "$PKG_NAME"
+  if [[ "$PKG_NAME" =~ -(bzr|git|hg|svn) ]]; then
+    if [ -n "${PKG_ALIASES[*]}" ]; then
+      printf >&2 'error: %s is a VCS package which cannot be splitted: %s\n' \
+        "$PKG_NAME" "${PKG_ALIASES[*]}"
+      return 2
+    fi
+    cp_echo "$PROTO_PKGBUILD_FILE2" "$PKG_NAME/PKGBUILD"
+  else
+    if [ -n "${PKG_ALIASES[*]}" ]; then
+      cp_echo "$PROTO_PKGBUILD_FILE1" "$PKG_NAME/PKGBUILD"
+    else
+      cp_echo "$PROTO_PKGBUILD_FILE0" "$PKG_NAME/PKGBUILD"
+    fi
+  fi
+  cp_echo "$PROTO_INSTALL_FILE" "$PKG_NAME/.install"
+  printf 2>&1 'ok: %s is here\n' "$(realpath "$PKG_NAME")"
+}
+
+case "$CMD_NAME" in
+  create)
+    command_create "$@"
+    ;;
+  help)
+    command_help "$@"
+    ;;
+  *)
+    command_help "$@"
+    exit 2
+esac
