@@ -98,7 +98,7 @@ command_verify() {
 command_publish() {
   PKG_NAME="$1"
   shift
-  git subtree push --prefix="$PKG_NAME" "ssh://aur@aur.archlinux.org/$PKG_NAME.git" HEAD
+  git subtree push --prefix="$PKG_NAME" "ssh://aur@aur.archlinux.org/$PKG_NAME.git" master
 }
 
 case "$CMD_NAME" in
