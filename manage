@@ -9,16 +9,14 @@ PROTO_PKGBUILD_FILE1="$PROTO_DIR/PKGBUILD-split.proto"
 PROTO_PKGBUILD_FILE2="$PROTO_DIR/PKGBUILD-vcs.proto"
 PROTO_INSTALL_FILE="$PROTO_DIR/proto.install"
 
-{ set -x; } 2>/dev/null
 test -f "$PROTO_PKGBUILD_FILE0"
 test -f "$PROTO_PKGBUILD_FILE1"
 test -f "$PROTO_PKGBUILD_FILE2"
 test -f "$PROTO_INSTALL_FILE"
-{ set +x; } 2>/dev/null
 
 PROG_NAME="$0"
 CMD_NAME="$1"
-shift
+shift || true
 
 mkdir_empty() {
   mkdir -p "$1"
@@ -28,17 +26,20 @@ mkdir_empty() {
   fi
 }
 
-cp_echo() {
+_trace() {
   { set -x; } 2>/dev/null
-  cp "$@"
+  "$@"
   { set +x; } 2>/dev/null
 }
 
 command_help() {
   printf >&2 'Usage: %s COMMAND\n' "$PROG_NAME"
   printf >&2 'Commands:\n'
-  printf >&2 '  %-15s%s\n' \
-    "create" "Create a new package from example" \
+  printf >&2 '  %-20s%s\n' \
+    "create PKG_NAME" "Create a new package from example" \
+    "build PKG_NAME" "Build and verify a package" \
+    "verify PKG_NAME" "Verify a package without build it" \
+    "publish PKG_NAME" "Publish a package to official AUR" \
     "help" "Show this help information"
 }
 
@@ -53,24 +54,55 @@ command_create() {
         "$PKG_NAME" "${PKG_ALIASES[*]}"
       return 2
     fi
-    cp_echo "$PROTO_PKGBUILD_FILE2" "$PKG_NAME/PKGBUILD"
+    _trace cp "$PROTO_PKGBUILD_FILE2" "$PKG_NAME/PKGBUILD"
   else
     if [ -n "${PKG_ALIASES[*]}" ]; then
-      cp_echo "$PROTO_PKGBUILD_FILE1" "$PKG_NAME/PKGBUILD"
+      _trace cp "$PROTO_PKGBUILD_FILE1" "$PKG_NAME/PKGBUILD"
     else
-      cp_echo "$PROTO_PKGBUILD_FILE0" "$PKG_NAME/PKGBUILD"
+      _trace cp "$PROTO_PKGBUILD_FILE0" "$PKG_NAME/PKGBUILD"
     fi
   fi
-  cp_echo "$PROTO_INSTALL_FILE" "$PKG_NAME/.install"
+  _trace cp "$PROTO_INSTALL_FILE" "$PKG_NAME/.install"
   printf 2>&1 'ok: %s is here\n' "$(realpath "$PKG_NAME")"
 }
 
+command_build() {
+  PKG_NAME="$1"
+  shift
+  git clean -fxd "$PKG_NAME"
+  (
+    cd "$PKG_NAME"
+    _trace makepkg -s
+  )
+  command_verify "$PKG_NAME"
+}
+
+command_verify() {
+  if ! command -v repro >/dev/null 2>&1; then
+    printf >&2 'error: repro is not found. (pacman -Sy archlinux-repro)\n'
+    printf >&2 '       https://wiki.archlinux.org/title/Arch_package_guidelines#Reproducible_builds\n'
+    return 1
+  fi
+
+  PKG_NAME="$1"
+  shift
+  (
+    cd "$PKG_NAME"
+    for PKG_FILE in *.pkg.tar.zst; do
+      _trace repro -f "$PKG_FILE"
+    done
+  )
+}
+
+command_publish() {
+  PKG_NAME="$1"
+  shift
+  git subtree push --prefix="$PKG_NAME" "ssh://aur@aur.archlinux.org/$PKG_NAME.git" HEAD
+}
+
 case "$CMD_NAME" in
-  create)
-    command_create "$@"
-    ;;
-  help)
-    command_help "$@"
+  create|build|verify|publish|help)
+    command_"$CMD_NAME" "$@"
     ;;
   *)
     command_help "$@"
